@@ -1,72 +1,84 @@
 from gpiozero import Button, PWMLED
 from signal import pause
 import time
+import speech_recognition as sr
 
-# Encoder 1 pins
-clk1 = Button(16, pull_up=True)  # GPIO16
-dt1 = Button(20, pull_up=True)   # GPIO20
-sw1 = Button(21, pull_up=True)   # GPIO21
-light1 = PWMLED(26)              # GPIO26 for Light 1
+# Initialize speech recognizer
+recognizer = sr.Recognizer()
 
-# Encoder 2 pins
-clk2 = Button(23, pull_up=True)  # GPIO23
-dt2 = Button(24, pull_up=True)   # GPIO24
-sw2 = Button(25, pull_up=True)   # GPIO25
-light2 = PWMLED(19)              # GPIO19 for Light 2
+# Rotary Encoder Configurations
+encoders = [
+    {"clk": Button(16, pull_up=True), "dt": Button(20, pull_up=True), "sw": Button(21, pull_up=True), "led": PWMLED(26), "position": 0, "state": True},
+    {"clk": Button(23, pull_up=True), "dt": Button(24, pull_up=True), "sw": Button(25, pull_up=True), "led": PWMLED(19), "position": 0, "state": True},
+    {"clk": Button(17, pull_up=True), "dt": Button(27, pull_up=True), "sw": Button(22, pull_up=True), "led": PWMLED(13), "position": 0, "state": True},
+    {"clk": Button(5, pull_up=True), "dt": Button(6, pull_up=True), "sw": Button(12, pull_up=True), "led": PWMLED(18), "position": 0, "state": True},
+    {"clk": Button(14, pull_up=True), "dt": Button(15, pull_up=True), "sw": Button(4, pull_up=True), "led": PWMLED(22), "position": 0, "state": True},
+]
 
-# Encoder 3 pins
-clk3 = Button(17, pull_up=True)  # GPIO17
-dt3 = Button(27, pull_up=True)   # GPIO27
-sw3 = Button(22, pull_up=True)   # GPIO22
-light3 = PWMLED(13)              # GPIO13 for Light 3
+# Adjust brightness for a specific encoder
+def adjust_brightness(encoder):
+    if encoder["state"]:  # Only adjust brightness if the LED is on
+        brightness = encoder["position"] / 100
+        encoder["led"].value = brightness
+        print(f"LED on GPIO {encoder['led'].pin.number}: Position {encoder['position']}, Brightness {brightness:.2f}")
 
-# Position tracking with max value 0-100
-position1 = 0
-position2 = 0
-position3 = 0
-
-# Functions to handle rotation and update brightness
-def rotate1():
-    global position1
-    if clk1.is_pressed != dt1.is_pressed:
-        if position1 < 100:
-            position1 += 1
+# Rotate handler for all encoders
+def rotate(encoder):
+    if encoder["clk"].is_pressed != encoder["dt"].is_pressed:
+        if encoder["position"] < 100:
+            encoder["position"] += 1
     else:
-        if position1 > 0:
-            position1 -= 1
-    brightness = position1 / 100  # Scale position to a value between 0 and 1
-    light1.value = brightness
-    print(f"Encoder 1 Position: {position1}, Brightness: {brightness:.2f}")
+        if encoder["position"] > 0:
+            encoder["position"] -= 1
+    adjust_brightness(encoder)
 
-def rotate2():
-    global position2
-    if clk2.is_pressed != dt2.is_pressed:
-        if position2 < 100:
-            position2 += 1
+# Button press handler for toggling LEDs
+def toggle_led(encoder):
+    encoder["state"] = not encoder["state"]
+    if encoder["state"]:
+        adjust_brightness(encoder)  # Restore brightness
+        print(f"LED on GPIO {encoder['led'].pin.number}: ON")
     else:
-        if position2 > 0:
-            position2 -= 1
-    brightness = position2 / 100  # Scale position to a value between 0 and 1
-    light2.value = brightness
-    print(f"Encoder 2 Position: {position2}, Brightness: {brightness:.2f}")
+        encoder["led"].off()
+        print(f"LED on GPIO {encoder['led'].pin.number}: OFF")
+    time.sleep(0.5)
 
-def rotate3():
-    global position3
-    if clk3.is_pressed != dt3.is_pressed:
-        if position3 < 100:
-            position3 += 1
-    else:
-        if position3 > 0:
-            position3 -= 1
-    brightness = position3 / 100  # Scale position to a value between 0 and 1
-    light3.value = brightness
-    print(f"Encoder 3 Position: {position3}, Brightness: {brightness:.2f}")
+# Assign callbacks to each encoder
+for encoder in encoders:
+    encoder["clk"].when_pressed = lambda e=encoder: rotate(e)
+    encoder["sw"].when_pressed = lambda e=encoder: toggle_led(e)
 
-# Assign callbacks for rotation
-clk1.when_pressed = rotate1
-clk2.when_pressed = rotate2
-clk3.when_pressed = rotate3
+# Voice control function
+def voice_control():
+    with sr.Microphone() as source:
+        print("Listening for a command...")
+        try:
+            audio = recognizer.listen(source, timeout=5)
+            command = recognizer.recognize_google(audio).lower()
+            print(f"Command received: {command}")
 
-# Run indefinitely
-print("Rotary Encoder Program Running...")
-pause()
+            # Parse commands for LEDs
+            for i, encoder in enumerate(encoders, start=1):
+                if f"led {i}" in command:
+                    if "on" in command:
+                        encoder["state"] = True
+                        adjust_brightness(encoder)
+                        print(f"LED {i}: ON via voice")
+                    elif "off" in command:
+                        encoder["state"] = False
+                        encoder["led"].off()
+                        print(f"LED {i}: OFF via voice")
+        except sr.UnknownValueError:
+            print("Could not understand the audio.")
+        except sr.RequestError as e:
+            print(f"Error with the speech recognition service: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+
+# Main loop
+try:
+    print("Rotary Encoder Program Running...")
+    while True:
+        voice_control()
+except KeyboardInterrupt:
+    print("Program terminated.")
