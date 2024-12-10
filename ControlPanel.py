@@ -1,10 +1,6 @@
 from gpiozero import Button, PWMLED
 from signal import pause
 import time
-import speech_recognition as sr
-
-# Initialize speech recognizer
-recognizer = sr.Recognizer()
 
 # Rotary Encoder Configurations
 encoders = [
@@ -48,37 +44,6 @@ for encoder in encoders:
     encoder["clk"].when_pressed = lambda e=encoder: rotate(e)
     encoder["sw"].when_pressed = lambda e=encoder: toggle_led(e)
 
-# Voice control function
-def voice_control():
-    with sr.Microphone() as source:
-        print("Listening for a command...")
-        try:
-            audio = recognizer.listen(source, timeout=5)
-            command = recognizer.recognize_google(audio).lower()
-            print(f"Command received: {command}")
-
-            # Parse commands for LEDs
-            for i, encoder in enumerate(encoders, start=1):
-                if f"led {i}" in command:
-                    if "on" in command:
-                        encoder["state"] = True
-                        adjust_brightness(encoder)
-                        print(f"LED {i}: ON via voice")
-                    elif "off" in command:
-                        encoder["state"] = False
-                        encoder["led"].off()
-                        print(f"LED {i}: OFF via voice")
-        except sr.UnknownValueError:
-            print("Could not understand the audio.")
-        except sr.RequestError as e:
-            print(f"Error with the speech recognition service: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-# Main loop
-try:
-    print("Rotary Encoder Program Running...")
-    while True:
-        voice_control()
-except KeyboardInterrupt:
-    print("Program terminated.")
+# Run indefinitely
+print("Rotary Encoder Program Running...")
+pause()
